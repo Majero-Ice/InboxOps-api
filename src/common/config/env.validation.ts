@@ -10,4 +10,10 @@ export const envValidationSchema = Joi.object({
   CONFIDENCE_THRESHOLD: Joi.number().default(0.7),
   MAX_UPLOAD_MB: Joi.number().default(15),
   PORT: Joi.number().default(3000),
+  FIRECRAWL_API_KEY: Joi.string().required(),
+  ENRICH_MAX_CHARS: Joi.number().default(12000),
+  ENRICH_ABOUT_PATHS: Joi.string().default('/about,/about-us'),
+  PUBLIC_EMAIL_DOMAINS: Joi.string().default(
+    'gmail.com,outlook.com,hotmail.com,yahoo.com,icloud.com,proton.me,protonmail.com,gmx.com,web.de,mail.ru,yandex.ru',
+  ),
 });

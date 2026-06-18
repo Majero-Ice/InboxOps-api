@@ -59,8 +59,10 @@ describe('Invoice Service (e2e)', () => {
   describe('GET /health', () => {
     beforeEach(async () => {
       app = await createTestApp({
-        extractFromText: jest.fn(),
-        extractFromImages: jest.fn(),
+        claudeService: {
+          extractFromText: jest.fn(),
+          extractFromImages: jest.fn(),
+        },
       });
     });
 
@@ -72,8 +74,10 @@ describe('Invoice Service (e2e)', () => {
   describe('POST /invoices/process auth', () => {
     beforeEach(async () => {
       app = await createTestApp({
-        extractFromText: jest.fn(),
-        extractFromImages: jest.fn(),
+        claudeService: {
+          extractFromText: jest.fn(),
+          extractFromImages: jest.fn(),
+        },
       });
     });
 
@@ -96,8 +100,10 @@ describe('Invoice Service (e2e)', () => {
   describe('POST /invoices/process outcomes', () => {
     it('returns status ok for a clean, consistent invoice', async () => {
       app = await createTestApp({
-        extractFromText: jest.fn().mockResolvedValue(cleanExtraction),
-        extractFromImages: jest.fn(),
+        claudeService: {
+          extractFromText: jest.fn().mockResolvedValue(cleanExtraction),
+          extractFromImages: jest.fn(),
+        },
       });
 
       const response = await request(app.getHttpServer())
@@ -115,8 +121,10 @@ describe('Invoice Service (e2e)', () => {
 
     it('returns needs_review with arithmetic_detail when totals do not reconcile', async () => {
       app = await createTestApp({
-        extractFromText: jest.fn().mockResolvedValue(mismatchExtraction),
-        extractFromImages: jest.fn(),
+        claudeService: {
+          extractFromText: jest.fn().mockResolvedValue(mismatchExtraction),
+          extractFromImages: jest.fn(),
+        },
       });
 
       const response = await request(app.getHttpServer())
@@ -134,10 +142,12 @@ describe('Invoice Service (e2e)', () => {
 
     it('returns extraction_failed when Claude output is unparseable', async () => {
       app = await createTestApp({
-        extractFromText: jest
-          .fn()
-          .mockRejectedValue(new InvalidExtractionJsonError()),
-        extractFromImages: jest.fn(),
+        claudeService: {
+          extractFromText: jest
+            .fn()
+            .mockRejectedValue(new InvalidExtractionJsonError()),
+          extractFromImages: jest.fn(),
+        },
       });
 
       const response = await request(app.getHttpServer())
@@ -157,8 +167,10 @@ describe('Invoice Service (e2e)', () => {
 
     it('returns extraction_failed for a corrupt PDF without crashing', async () => {
       app = await createTestApp({
-        extractFromText: jest.fn(),
-        extractFromImages: jest.fn(),
+        claudeService: {
+          extractFromText: jest.fn(),
+          extractFromImages: jest.fn(),
+        },
       });
 
       const corruptPdf = Buffer.from('not-a-valid-pdf').toString('base64');

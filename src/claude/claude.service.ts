@@ -7,11 +7,20 @@ import type {
   ToolUseBlock,
 } from '@anthropic-ai/sdk/resources/messages/messages';
 import {
+  COMPANY_EXTRACTION_SYSTEM_PROMPT,
+  COMPANY_EXTRACTION_USER_PROMPT,
+} from '../enrichment/prompts/company-extraction.prompt';
+import {
+  ClaudeCompanyExtractionResult,
+  ClaudeExtractionResult,
+  RawCompanyExtraction,
+  RawExtraction,
+} from './claude.types';
+import {
   EXTRACTION_SYSTEM_PROMPT,
   EXTRACTION_TEXT_USER_PROMPT,
   EXTRACTION_VISION_USER_PROMPT,
 } from './prompts/extraction.prompt';
-import { ClaudeExtractionResult, RawExtraction } from './claude.types';
 
 const MAX_RETRIES = 2;
 const BASE_DELAY_MS = 500;
@@ -62,6 +71,39 @@ const EXTRACT_INVOICE_TOOL_CHOICE = {
   name: 'extract_invoice',
 };
 
+const EXTRACT_COMPANY_TOOL: Tool = {
+  name: 'extract_company_profile',
+  description: 'Extract structured company profile data from website content.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      confidence: { type: 'number' },
+      company: {
+        type: 'object',
+        properties: {
+          name: { type: ['string', 'null'] },
+          description: { type: ['string', 'null'] },
+          industry: { type: ['string', 'null'] },
+          size_hint: { type: ['string', 'null'] },
+          products_services: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+          location: { type: ['string', 'null'] },
+          tone: { type: ['string', 'null'] },
+        },
+        required: ['products_services'],
+      },
+    },
+    required: ['confidence', 'company'],
+  },
+};
+
+const EXTRACT_COMPANY_TOOL_CHOICE = {
+  type: 'tool' as const,
+  name: 'extract_company_profile',
+};
+
 export class InvalidExtractionJsonError extends Error {
   constructor(message = 'Claude returned invalid or unparseable JSON') {
     super(message);
@@ -95,6 +137,7 @@ export class ClaudeService {
           },
         ],
       }),
+      (response) => this.parseInvoiceResponse(response),
     );
   }
 
@@ -126,19 +169,44 @@ export class ClaudeService {
           },
         ],
       }),
+      (response) => this.parseInvoiceResponse(response),
     );
   }
 
-  private async callWithRetry(
+  async extractCompanyProfile(
+    markdown: string,
+    domain: string,
+  ): Promise<ClaudeCompanyExtractionResult> {
+    const model = this.configService.getOrThrow<string>('CLAUDE_TEXT_MODEL');
+    return this.callWithRetry(model, () =>
+      this.client.messages.create({
+        model,
+        max_tokens: MAX_OUTPUT_TOKENS,
+        system: COMPANY_EXTRACTION_SYSTEM_PROMPT,
+        tools: [EXTRACT_COMPANY_TOOL],
+        tool_choice: EXTRACT_COMPANY_TOOL_CHOICE,
+        messages: [
+          {
+            role: 'user',
+            content: `${COMPANY_EXTRACTION_USER_PROMPT(domain)}\n\n${markdown}`,
+          },
+        ],
+      }),
+      (response) => this.parseCompanyResponse(response),
+    );
+  }
+
+  private async callWithRetry<T>(
     model: string,
     request: () => Promise<Message>,
-  ): Promise<ClaudeExtractionResult> {
+    parse: (response: Message) => T,
+  ): Promise<T & { model_used: string }> {
     let lastError: unknown;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const response = await request();
-        const parsed = this.parseExtractionResponse(response);
+        const parsed = parse(response);
         return { ...parsed, model_used: model };
       } catch (error) {
         lastError = error;
@@ -152,21 +220,36 @@ export class ClaudeService {
     throw lastError;
   }
 
-  private parseExtractionResponse(response: Message): RawExtraction {
+  private parseToolUseResponse(
+    response: Message,
+    toolName: string,
+  ): unknown {
     if (response.stop_reason === 'max_tokens') {
       throw new InvalidExtractionJsonError('Response truncated by max_tokens');
     }
 
     const toolUseBlock = response.content.find(
       (block): block is ToolUseBlock =>
-        block.type === 'tool_use' && block.name === 'extract_invoice',
+        block.type === 'tool_use' && block.name === toolName,
     );
 
     if (!toolUseBlock) {
       throw new InvalidExtractionJsonError('No tool_use block returned');
     }
 
-    return this.validateRawExtraction(toolUseBlock.input);
+    return toolUseBlock.input;
+  }
+
+  private parseInvoiceResponse(response: Message): RawExtraction {
+    return this.validateRawExtraction(
+      this.parseToolUseResponse(response, 'extract_invoice'),
+    );
+  }
+
+  private parseCompanyResponse(response: Message): RawCompanyExtraction {
+    return this.validateRawCompanyExtraction(
+      this.parseToolUseResponse(response, 'extract_company_profile'),
+    );
   }
 
   private validateRawExtraction(value: unknown): RawExtraction {
@@ -248,6 +331,66 @@ export class ClaudeService {
         subtotal: invoiceRecord.subtotal as number,
         tax: invoiceRecord.tax as number,
         total: invoiceRecord.total as number,
+      },
+    };
+  }
+
+  private validateRawCompanyExtraction(value: unknown): RawCompanyExtraction {
+    if (!value || typeof value !== 'object') {
+      throw new InvalidExtractionJsonError();
+    }
+
+    const record = value as Record<string, unknown>;
+    const confidence = record.confidence;
+    const company = record.company;
+
+    if (typeof confidence !== 'number' || Number.isNaN(confidence)) {
+      throw new InvalidExtractionJsonError('Missing or invalid confidence');
+    }
+
+    if (!company || typeof company !== 'object') {
+      throw new InvalidExtractionJsonError('Missing or invalid company object');
+    }
+
+    const companyRecord = company as Record<string, unknown>;
+    const productsServices = companyRecord.products_services;
+
+    if (!Array.isArray(productsServices)) {
+      throw new InvalidExtractionJsonError('Missing or invalid products_services');
+    }
+
+    for (const item of productsServices) {
+      if (typeof item !== 'string') {
+        throw new InvalidExtractionJsonError('Invalid products_services entry');
+      }
+    }
+
+    const nullableStringFields = [
+      'name',
+      'description',
+      'industry',
+      'size_hint',
+      'location',
+      'tone',
+    ] as const;
+
+    for (const field of nullableStringFields) {
+      const fieldValue = companyRecord[field];
+      if (fieldValue !== null && typeof fieldValue !== 'string') {
+        throw new InvalidExtractionJsonError(`Invalid ${field}`);
+      }
+    }
+
+    return {
+      confidence,
+      company: {
+        name: companyRecord.name as string | null,
+        description: companyRecord.description as string | null,
+        industry: companyRecord.industry as string | null,
+        size_hint: companyRecord.size_hint as string | null,
+        products_services: productsServices,
+        location: companyRecord.location as string | null,
+        tone: companyRecord.tone as string | null,
       },
     };
   }

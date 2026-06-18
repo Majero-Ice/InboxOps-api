@@ -1,30 +1,71 @@
-import { ValidationPipe } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { json } from 'express';
 import { App } from 'supertest/types';
 import { AppModule } from '../../src/app.module';
 import { ClaudeService } from '../../src/claude/claude.service';
+import { FirecrawlService } from '../../src/enrichment/firecrawl/firecrawl.service';
+
+export interface TestAppOverrides {
+  claudeService?: Partial<ClaudeService>;
+  firecrawlService?: Partial<FirecrawlService>;
+}
+
+const testConfig: Record<string, string | number> = {
+  SERVICE_API_KEY: 'test-api-key',
+  ANTHROPIC_API_KEY: 'sk-ant-test',
+  CLAUDE_TEXT_MODEL: 'claude-haiku-4-5-20251001',
+  CLAUDE_VISION_MODEL: 'claude-sonnet-4-6',
+  FIRECRAWL_API_KEY: 'fc-test-key',
+  PDF_TEXT_MIN_CHARS: 100,
+  PDF_MAX_VISION_PAGES: 5,
+  CONFIDENCE_THRESHOLD: 0.7,
+  MAX_UPLOAD_MB: 15,
+  ENRICH_MAX_CHARS: 12000,
+  ENRICH_ABOUT_PATHS: '/about,/about-us',
+  PUBLIC_EMAIL_DOMAINS:
+    'gmail.com,outlook.com,hotmail.com,yahoo.com,icloud.com,proton.me,protonmail.com,gmx.com,web.de,mail.ru,yandex.ru',
+};
+
+const configService = {
+  get: <T>(key: string, defaultValue?: T): T | undefined => {
+    if (key in testConfig) {
+      return testConfig[key] as T;
+    }
+    return defaultValue;
+  },
+  getOrThrow: <T>(key: string): T => {
+    if (key in testConfig) {
+      return testConfig[key] as T;
+    }
+    throw new Error(`Config key not found: ${key}`);
+  },
+};
 
 export async function createTestApp(
-  claudeService: Partial<ClaudeService>,
+  overrides: TestAppOverrides = {},
 ): Promise<INestApplication<App>> {
-  process.env.SERVICE_API_KEY = 'test-api-key';
-  process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
-  process.env.CLAUDE_TEXT_MODEL = 'claude-haiku-4-5-20251001';
-  process.env.CLAUDE_VISION_MODEL = 'claude-sonnet-4-6';
-
-  const moduleFixture: TestingModule = await Test.createTestingModule({
+  let moduleBuilder = Test.createTestingModule({
     imports: [AppModule],
-  })
-    .overrideProvider(ClaudeService)
-    .useValue(claudeService)
-    .compile();
+  }).overrideProvider(ConfigService).useValue(configService);
+
+  if (overrides.claudeService) {
+    moduleBuilder = moduleBuilder
+      .overrideProvider(ClaudeService)
+      .useValue(overrides.claudeService);
+  }
+
+  if (overrides.firecrawlService) {
+    moduleBuilder = moduleBuilder
+      .overrideProvider(FirecrawlService)
+      .useValue(overrides.firecrawlService);
+  }
+
+  const moduleFixture: TestingModule = await moduleBuilder.compile();
 
   const app = moduleFixture.createNestApplication({ bodyParser: false });
-  const configService = app.get(ConfigService);
-  const maxUploadMb = configService.get<number>('MAX_UPLOAD_MB', 15);
+  const maxUploadMb = configService.get<number>('MAX_UPLOAD_MB', 15)!;
   const bodyLimitMb = Math.ceil(maxUploadMb * 1.4) + 1;
   app.use(json({ limit: `${bodyLimitMb}mb` }));
   app.useGlobalPipes(

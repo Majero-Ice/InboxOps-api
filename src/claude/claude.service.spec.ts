@@ -51,6 +51,19 @@ jest.mock('@anthropic-ai/sdk', () => {
   };
 });
 
+const validCompanyJson = {
+  confidence: 0.88,
+  company: {
+    name: 'Acme Corp',
+    description: 'Enterprise software',
+    industry: 'Technology',
+    size_hint: '50-200 employees',
+    products_services: ['SaaS platform'],
+    location: 'San Francisco, CA',
+    tone: 'Professional',
+  },
+};
+
 function toolUseResponse(input: unknown, stopReason = 'tool_use') {
   return {
     id: 'msg_test',
@@ -67,6 +80,26 @@ function toolUseResponse(input: unknown, stopReason = 'tool_use') {
       },
     ],
     stop_reason: stopReason,
+    usage: { input_tokens: 1, output_tokens: 1 },
+  };
+}
+
+function companyToolUseResponse(input: unknown) {
+  return {
+    id: 'msg_test',
+    type: 'message',
+    role: 'assistant',
+    model: 'claude-haiku-4-5-20251001',
+    content: [
+      {
+        type: 'tool_use',
+        id: 'toolu_company',
+        name: 'extract_company_profile',
+        input,
+        caller: { type: 'direct' },
+      },
+    ],
+    stop_reason: 'tool_use',
     usage: { input_tokens: 1, output_tokens: 1 },
   };
 }
@@ -199,6 +232,31 @@ describe('ClaudeService', () => {
               ]),
             }),
           ],
+        }),
+      );
+    });
+  });
+
+  describe('extractCompanyProfile', () => {
+    it('returns parsed company profile from tool_use block', async () => {
+      mockCreate.mockResolvedValue(companyToolUseResponse(validCompanyJson));
+
+      const result = await service.extractCompanyProfile(
+        '# Acme Corp\nEnterprise software for teams.',
+        'acme.com',
+      );
+
+      expect(result).toMatchObject({
+        ...validCompanyJson,
+        model_used: 'claude-haiku-4-5-20251001',
+      });
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'claude-haiku-4-5-20251001',
+          tools: [
+            expect.objectContaining({ name: 'extract_company_profile' }),
+          ],
+          tool_choice: { type: 'tool', name: 'extract_company_profile' },
         }),
       );
     });
