@@ -1,0 +1,37 @@
+# Coolify / VPS deploy — join the same external Docker network as n8n so workflows
+# can reach this service by container name (e.g. http://inboxops-api:3000).
+#
+# Before deploy:
+# 1. Find n8n's Docker network: docker network ls (Coolify often uses "coolify")
+# 2. Set N8N_DOCKER_NETWORK in .env to that exact network name
+# 3. In n8n HTTP nodes, use http://inboxops-api:${PORT}/invoices/process
+
+services:
+  inboxops-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inboxops-api
+    restart: unless-stopped
+    ports:
+      - '${PORT:-3000}:${PORT:-3000}'
+    env_file:
+      - .env
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          "node -e \"fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - default
+      - n8n_shared
+
+networks:
+  n8n_shared:
+    external: true
+    name: ${N8N_DOCKER_NETWORK:-coolify}
