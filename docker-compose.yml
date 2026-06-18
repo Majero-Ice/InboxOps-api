@@ -13,8 +13,6 @@ services:
       dockerfile: Dockerfile
     container_name: inboxops-api
     restart: unless-stopped
-    ports:
-      - '${PORT:-3000}:${PORT:-3000}'
     env_file:
       - .env
     healthcheck:
