@@ -85,7 +85,8 @@ describe('AdminService', () => {
       updated_at: new Date('2024-01-15T10:00:00.000Z'),
       subject: 'Project inquiry',
       body: 'Hello, we need help.',
-      received_at: new Date('2024-01-15T09:00:00.000Z'),
+      message_id: 'msg-1',
+      message_created_at: new Date('2024-01-15T09:00:00.000Z'),
       company_name: 'Acme Corp',
       industry: 'Technology',
       size_hint: '50-200',
@@ -99,8 +100,13 @@ describe('AdminService', () => {
 
     const details = await service.getLeadDetails('lead-1');
 
+    expect(db.queryOne).toHaveBeenCalledWith(
+      expect.stringContaining('m.created_at AS message_created_at'),
+      ['lead-1'],
+    );
     expect(details.lead.id).toBe('lead-1');
     expect(details.message?.subject).toBe('Project inquiry');
+    expect(details.message?.received_at).toBe('2024-01-15T09:00:00.000Z');
     expect(details.enrichment?.company_name).toBe('Acme Corp');
   });
 

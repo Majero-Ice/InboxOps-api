@@ -114,7 +114,8 @@ export class AdminService {
       updated_at: Date;
       subject: string | null;
       body: string | null;
-      received_at: Date | null;
+      message_id: string | null;
+      message_created_at: Date | null;
       company_name: string | null;
       industry: string | null;
       size_hint: string | null;
@@ -139,7 +140,8 @@ export class AdminService {
          l.updated_at,
          m.subject,
          m.body,
-         m.received_at,
+         m.id AS message_id,
+         m.created_at AS message_created_at,
          e.company_name,
          e.industry,
          e.size_hint,
@@ -175,12 +177,12 @@ export class AdminService {
         updated_at: row.updated_at.toISOString(),
       },
       message:
-        row.received_at === null
+        row.message_id === null
           ? null
           : {
               subject: row.subject,
               body: row.body,
-              received_at: row.received_at.toISOString(),
+              received_at: row.message_created_at!.toISOString(),
             },
       enrichment:
         row.enrichment_lead_id === null
