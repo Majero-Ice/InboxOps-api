@@ -174,6 +174,47 @@ describe('InvoiceService', () => {
     );
   });
 
+  it('returns not_an_invoice when no critical fields are present', async () => {
+    pdfService.detectType.mockResolvedValue('text');
+    pdfService.extractText.mockResolvedValue('random document text');
+    claudeService.extractFromText.mockResolvedValue(
+      buildExtraction({
+        invoice_number: null,
+        vendor: null,
+        total: 0,
+        line_items: [],
+        subtotal: 0,
+        tax: 0,
+      }),
+    );
+
+    const result = await service.process(dtoFor('pdf-bytes'));
+
+    expect(result.status).toBe('not_an_invoice');
+    expect(result.validation.issues).toEqual(
+      expect.arrayContaining([
+        'No invoice number, vendor, or total could be extracted — document does not appear to be an invoice',
+      ]),
+    );
+  });
+
+  it('returns needs_review (not not_an_invoice) when only vendor is missing but total exists', async () => {
+    pdfService.detectType.mockResolvedValue('text');
+    pdfService.extractText.mockResolvedValue('invoice text');
+    claudeService.extractFromText.mockResolvedValue(
+      buildExtraction({
+        invoice_number: 'INV-001',
+        vendor: null,
+        total: 1200,
+      }),
+    );
+
+    const result = await service.process(dtoFor('pdf-bytes'));
+
+    expect(result.status).toBe('needs_review');
+    expect(result.status).not.toBe('not_an_invoice');
+  });
+
   it('rejects oversized decoded payloads with 413', async () => {
     const oversized = 'a'.repeat(16 * 1024 * 1024);
 

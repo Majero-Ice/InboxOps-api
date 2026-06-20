@@ -44,6 +44,19 @@ const mismatchExtraction: ClaudeExtractionResult = {
   },
 };
 
+const notAnInvoiceExtraction: ClaudeExtractionResult = {
+  ...cleanExtraction,
+  invoice: {
+    ...cleanExtraction.invoice,
+    invoice_number: null,
+    vendor: null,
+    total: 0,
+    line_items: [],
+    subtotal: 0,
+    tax: 0,
+  },
+};
+
 describe('Invoice Service (e2e)', () => {
   let app: INestApplication<App>;
   let pdfBase64: string;
@@ -137,6 +150,28 @@ describe('Invoice Service (e2e)', () => {
       expect(response.body.validation.arithmetic_ok).toBe(false);
       expect(response.body.validation.arithmetic_detail).toBe(
         'sum of line items (1900.00) + tax (190.00) != total (1200.00)',
+      );
+    });
+
+    it('returns not_an_invoice when no critical fields are extracted', async () => {
+      app = await createTestApp({
+        claudeService: {
+          extractFromText: jest.fn().mockResolvedValue(notAnInvoiceExtraction),
+          extractFromImages: jest.fn(),
+        },
+      });
+
+      const response = await request(app.getHttpServer())
+        .post('/invoices/process')
+        .set('x-api-key', 'test-api-key')
+        .send({ file: pdfBase64 })
+        .expect(200);
+
+      expect(response.body.status).toBe('not_an_invoice');
+      expect(response.body.validation.issues).toEqual(
+        expect.arrayContaining([
+          'No invoice number, vendor, or total could be extracted — document does not appear to be an invoice',
+        ]),
       );
     });
 

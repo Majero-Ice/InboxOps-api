@@ -153,4 +153,54 @@ describe('ValidationService', () => {
       expect(service.isConfidenceAcceptable(0)).toBe(false);
     });
   });
+
+  describe('isNotAnInvoice', () => {
+    it('returns true when invoice_number, vendor, and total are all absent', () => {
+      expect(
+        service.isNotAnInvoice({
+          invoice_number: null,
+          vendor: null,
+          issue_date: null,
+          due_date: null,
+          currency: null,
+          line_items: [],
+          subtotal: 0,
+          tax: 0,
+          total: 0,
+        }),
+      ).toBe(true);
+    });
+
+    it('returns false when vendor is present', () => {
+      expect(
+        service.isNotAnInvoice({
+          invoice_number: null,
+          vendor: 'Acme Corp',
+          issue_date: null,
+          due_date: null,
+          currency: null,
+          line_items: [],
+          subtotal: 0,
+          tax: 0,
+          total: 0,
+        }),
+      ).toBe(false);
+    });
+
+    it('returns false when total is non-zero', () => {
+      expect(
+        service.isNotAnInvoice({
+          invoice_number: null,
+          vendor: null,
+          issue_date: null,
+          due_date: null,
+          currency: null,
+          line_items: [],
+          subtotal: 100,
+          tax: 0,
+          total: 100,
+        }),
+      ).toBe(false);
+    });
+  });
 });

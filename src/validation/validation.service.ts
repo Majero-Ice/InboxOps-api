@@ -12,6 +12,9 @@ import {
 const ARITHMETIC_TOLERANCE = 0.02;
 const MAX_FUTURE_DAYS = 30;
 
+export const NOT_AN_INVOICE_ISSUE =
+  'No invoice number, vendor, or total could be extracted — document does not appear to be an invoice';
+
 @Injectable()
 export class ValidationService {
   constructor(private readonly config: ConfigService) {}
@@ -67,6 +70,17 @@ export class ValidationService {
   isConfidenceAcceptable(confidence: number): boolean {
     const threshold = this.config.get<number>('CONFIDENCE_THRESHOLD', 0.7);
     return confidence >= threshold;
+  }
+
+  isNotAnInvoice(invoice: RawInvoice): boolean {
+    const hasInvoiceNumber = Boolean(invoice.invoice_number?.trim());
+    const hasVendor = Boolean(invoice.vendor?.trim());
+    const hasTotal =
+      typeof invoice.total === 'number' &&
+      !Number.isNaN(invoice.total) &&
+      invoice.total !== 0;
+
+    return !hasInvoiceNumber && !hasVendor && !hasTotal;
   }
 
   private hasValidTotal(invoice: RawInvoice): boolean {

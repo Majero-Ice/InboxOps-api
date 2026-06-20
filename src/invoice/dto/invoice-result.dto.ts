@@ -1,6 +1,10 @@
 import { ExtractedInvoiceDto } from './extracted-invoice.dto';
 
-export type InvoiceStatus = 'ok' | 'needs_review' | 'extraction_failed';
+export type InvoiceStatus =
+  | 'ok'
+  | 'needs_review'
+  | 'not_an_invoice'
+  | 'extraction_failed';
 
 export type PdfTypeResult = 'text' | 'scanned' | 'unknown';
 

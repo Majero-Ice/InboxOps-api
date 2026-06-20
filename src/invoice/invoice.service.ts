@@ -5,6 +5,7 @@ import { ClaudeExtractionResult } from '../claude/claude.types';
 import { PdfService } from '../pdf/pdf.service';
 import { PdfType } from '../pdf/pdf.types';
 import { ValidationService } from '../validation/validation.service';
+import { NOT_AN_INVOICE_ISSUE } from '../validation/validation.service';
 import {
   InvoiceResultDto,
   InvoiceStatus,
@@ -38,9 +39,8 @@ export class InvoiceService {
       const allIssues = [...issues, ...validationResult.validation.issues];
 
       const status = this.decideStatus(
-        validationResult.recommendation,
-        extraction.confidence,
-        extraction.multiple_invoices,
+        extraction,
+        validationResult,
         allIssues,
       );
 
@@ -94,21 +94,27 @@ export class InvoiceService {
   }
 
   private decideStatus(
-    recommendation: 'ok' | 'needs_review',
-    confidence: number,
-    multipleInvoices: boolean,
+    extraction: ClaudeExtractionResult,
+    validationResult: Awaited<ReturnType<ValidationService['validate']>>,
     issues: string[],
   ): InvoiceStatus {
-    if (recommendation === 'needs_review') {
+    if (this.validationService.isNotAnInvoice(extraction.invoice)) {
+      issues.push(NOT_AN_INVOICE_ISSUE);
+      return 'not_an_invoice';
+    }
+
+    if (validationResult.recommendation === 'needs_review') {
       return 'needs_review';
     }
 
-    if (!this.validationService.isConfidenceAcceptable(confidence)) {
-      issues.push(`Confidence ${confidence} is below the acceptance threshold.`);
+    if (!this.validationService.isConfidenceAcceptable(extraction.confidence)) {
+      issues.push(
+        `Confidence ${extraction.confidence} is below the acceptance threshold.`,
+      );
       return 'needs_review';
     }
 
-    if (multipleInvoices) {
+    if (extraction.multiple_invoices) {
       issues.push('Multiple invoices detected in a single PDF.');
       return 'needs_review';
     }
