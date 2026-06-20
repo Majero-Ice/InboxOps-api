@@ -16,4 +16,11 @@ export const envValidationSchema = Joi.object({
   PUBLIC_EMAIL_DOMAINS: Joi.string().default(
     'gmail.com,outlook.com,hotmail.com,yahoo.com,icloud.com,proton.me,protonmail.com,gmx.com,web.de,mail.ru,yandex.ru',
   ),
+  DB_HOST: Joi.string().required(),
+  DB_PORT: Joi.number().default(5432),
+  DB_NAME: Joi.string().required(),
+  DB_USER: Joi.string().required(),
+  DB_PASSWORD: Joi.string().allow('').required(),
+  ADMIN_PASSWORD: Joi.string().required(),
+  ADMIN_JWT_SECRET: Joi.string().required(),
 });

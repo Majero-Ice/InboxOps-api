@@ -5,11 +5,13 @@ import { json } from 'express';
 import { App } from 'supertest/types';
 import { AppModule } from '../../src/app.module';
 import { ClaudeService } from '../../src/claude/claude.service';
+import { DbService } from '../../src/db/db.service';
 import { FirecrawlService } from '../../src/enrichment/firecrawl/firecrawl.service';
 
 export interface TestAppOverrides {
   claudeService?: Partial<ClaudeService>;
   firecrawlService?: Partial<FirecrawlService>;
+  dbService?: Partial<DbService>;
 }
 
 const testConfig: Record<string, string | number> = {
@@ -26,6 +28,20 @@ const testConfig: Record<string, string | number> = {
   ENRICH_ABOUT_PATHS: '/about,/about-us',
   PUBLIC_EMAIL_DOMAINS:
     'gmail.com,outlook.com,hotmail.com,yahoo.com,icloud.com,proton.me,protonmail.com,gmx.com,web.de,mail.ru,yandex.ru',
+  DB_HOST: 'localhost',
+  DB_PORT: 5432,
+  DB_NAME: 'postgres',
+  DB_USER: 'postgres',
+  DB_PASSWORD: 'postgres',
+  ADMIN_PASSWORD: 'admin-test-password',
+  ADMIN_JWT_SECRET: 'admin-test-jwt-secret',
+};
+
+const defaultDbService = {
+  query: jest.fn().mockResolvedValue([]),
+  queryOne: jest.fn().mockResolvedValue(null),
+  onModuleInit: jest.fn(),
+  onModuleDestroy: jest.fn(),
 };
 
 const configService = {
@@ -48,7 +64,11 @@ export async function createTestApp(
 ): Promise<INestApplication<App>> {
   let moduleBuilder = Test.createTestingModule({
     imports: [AppModule],
-  }).overrideProvider(ConfigService).useValue(configService);
+  })
+    .overrideProvider(ConfigService)
+    .useValue(configService)
+    .overrideProvider(DbService)
+    .useValue({ ...defaultDbService, ...overrides.dbService });
 
   if (overrides.claudeService) {
     moduleBuilder = moduleBuilder

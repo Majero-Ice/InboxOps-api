@@ -263,7 +263,7 @@ Do not add Firecrawl, Playwright, HTTP scraping, or any enrichment logic in this
 
 
 
-# Implementation Order — Invoice Service (Cursor Prompts)
+# Implementation Order — Invoice Service
 
 
 ## Step 1 — Scaffold
@@ -365,3 +365,88 @@ Do not add Firecrawl, Playwright, HTTP scraping, or any enrichment logic in this
 ## Scaffold note (do during Step 1 or 5, not a separate step)
 
 Create `enrichment/enrichment.module.ts` as an **empty placeholder** registered in `app.module.ts`, with a comment describing the planned phase-2 design (Firecrawl now, custom Playwright scraper with fallback later). **Do not implement any enrichment logic.**
+
+
+## AdminModule (added to existing NestJS service)
+
+### Database access
+- Add a `pg` Pool, configured from env (host, port, db, user, password — the same Postgres the service's network can reach).
+- Create a small `DbModule`/`DbService` wrapping the pool with a `query(sql, params)` helper. Use parameterized queries (`$1, $2`) — never string-interpolate input.
+- This is the first time the service touches the DB; keep it isolated in its own module so the stateless invoice/enrichment flows are unaffected.
+
+### Auth
+- `AdminAuthGuard`: validates a bearer token on all `/admin/*` routes except `/admin/login`.
+- Token: on login, compare the submitted password (constant-time) to `ADMIN_PASSWORD` env. If valid, issue a signed token (JWT signed with `ADMIN_JWT_SECRET`, or a simple signed token) with a reasonable expiry (e.g. 12h). No user records — the token just proves "the operator logged in".
+
+### Endpoints
+
+**`POST /admin/login`**
+- Body: `{ "password": "..." }`
+- Returns `{ "token": "..." }` on success, `401` on wrong password.
+- No auth guard on this route.
+
+**`GET /admin/stats`** (dashboard numbers)
+- Returns aggregate counts. Example shape:
+```json
+{
+  "leads_by_stage": { "new": 12, "reviewing": 3, "contacted": 5, "qualified": 2, "rejected": 1 },
+  "leads_total": 23,
+  "invoices_total": 40,
+  "invoices_needs_review": 4,
+  "avg_extraction_confidence": 0.91
+}
+```
+- Implement with SQL aggregates: `select stage, count(*) from inboxops.leads group by stage`, `count(*)` on invoices, `avg(confidence)` on invoices, etc. One or a few queries — do not pull all rows and count in JS.
+
+**`GET /admin/leads`** (list)
+- Optional query param `stage` to filter (`?stage=new`).
+- Returns an array of leads with the fields needed for a table: `id, from_address, request (or summary), priority, stage, created_at, has_enrichment` (boolean — whether an enrichment row exists for this lead).
+- SQL: select from `inboxops.leads`, left join `inboxops.enrichment` to compute `has_enrichment`. Order by `created_at desc`.
+
+**`GET /admin/leads/:id`** (details)
+- Returns one lead joined with its source message and enrichment:
+```json
+{
+  "lead": { "id": "...", "from_address": "...", "budget": "...", "deadline": "...", "contact": "...", "request": "...", "requested_action": "...", "priority": "...", "stage": "...", "created_at": "..." },
+  "message": { "subject": "...", "body": "...", "received_at": "..." },
+  "enrichment": { "company_name": "...", "industry": "...", "size_hint": "...", "description": "...", "products_services": [...], "location": "...", "source_url": "...", "confidence": 0.0 }
+}
+```
+- `message` and `enrichment` may be null if not present. JOIN `leads` → `messages` (via `message_id`) → `enrichment` (via `lead_id`).
+
+**`PATCH /admin/leads/:id/stage`** (the core action)
+- Body: `{ "stage": "contacted" }`
+- Validate `stage` is one of `new | reviewing | contacted | qualified | rejected` (reject others with `400`).
+- `update inboxops.leads set stage = $1, updated_at = now() where id = $2`.
+- Returns the updated lead. `404` if the lead doesn't exist.
+
+### Module structure
+```
+src/
+  admin/
+    admin.module.ts
+    admin.controller.ts          # all /admin routes
+    admin.service.ts             # SQL queries for stats/leads/details/stage
+    auth/
+      admin-auth.guard.ts
+      admin-auth.service.ts      # login + token issue/verify
+    dto/
+      login.dto.ts
+      update-stage.dto.ts
+  db/
+    db.module.ts
+    db.service.ts                # pg Pool + query helper
+```
+
+### New env vars
+```
+DB_HOST=                  # Postgres host reachable from the service (internal)
+DB_PORT=5432
+DB_NAME=postgres
+DB_USER=postgres
+DB_PASSWORD=
+ADMIN_PASSWORD=           # the single admin login password
+ADMIN_JWT_SECRET=         # secret for signing the admin token
+```
+
+---

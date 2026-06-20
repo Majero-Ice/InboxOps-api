@@ -1,0 +1,12 @@
+process.env.SERVICE_API_KEY ??= 'test-api-key';
+process.env.ANTHROPIC_API_KEY ??= 'sk-ant-test';
+process.env.CLAUDE_TEXT_MODEL ??= 'claude-haiku-4-5-20251001';
+process.env.CLAUDE_VISION_MODEL ??= 'claude-sonnet-4-6';
+process.env.FIRECRAWL_API_KEY ??= 'fc-test-key';
+process.env.DB_HOST ??= 'localhost';
+process.env.DB_PORT ??= '5432';
+process.env.DB_NAME ??= 'postgres';
+process.env.DB_USER ??= 'postgres';
+process.env.DB_PASSWORD ??= 'postgres';
+process.env.ADMIN_PASSWORD ??= 'admin-test-password';
+process.env.ADMIN_JWT_SECRET ??= 'admin-test-jwt-secret';
