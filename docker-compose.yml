@@ -9,6 +9,9 @@
 services:
   inboxops-api:
     build:
+      labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${N8N_DOCKER_NETWORK:-coolify}"
       context: .
       dockerfile: Dockerfile
     container_name: inboxops-api
