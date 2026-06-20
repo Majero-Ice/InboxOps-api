@@ -28,8 +28,12 @@ services:
     networks:
       - default
       - n8n_shared
+      - supabase_net
 
 networks:
   n8n_shared:
     external: true
     name: ${N8N_DOCKER_NETWORK:-coolify}
+  supabase_net:
+    external: true
+    name: yoyww43jsd69dkjv82t2b5qm
